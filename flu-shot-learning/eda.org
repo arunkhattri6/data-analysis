@@ -1,0 +1,76 @@
+#+title: Exploratory Data Analysis: Flu-shot Learning
+#+author: Arun Khattri
+#+date: Jan 20, 2024
+
+* Pre-requisites
+importing packages
+#+begin_src python :session *py-session  :exports code :tangle "eda.py"
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+#+end_src
+
+#+RESULTS:
+: None
+
+* Data
+loading training data ...
+
+#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+train = pd.read_csv("./data/training_set_features.csv", index_col="respondent_id")
+labels_train = pd.read_csv("./data/training_set_labels.csv", index_col="respondent_id")
+print(f"train shape:       {train.shape}")
+print(f"train label shape: {labels_train.shape}")
+#+end_src
+
+#+RESULTS:
+: train shape:       (26707, 35)
+: train label shape: (26707, 2)
+
+Sanity check for having same obesrvations in labels and features data of training set...
+
+#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+np.testing.assert_array_equal(train.index.values, labels_train.index.values)
+#+end_src
+
+#+RESULTS:
+
+the assertion ran and nothing happen, so far so good.
+
+loading test data and examining the shape ...
+
+#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+test = pd.read_csv("./data/test_set_features.csv")
+print(f"test shape: {test.shape}")
+#+end_src
+
+#+RESULTS:
+: test shape: (26708, 36)
+
+* Exploration
+
+** labels
+taking a look at distribution of two target variables.
+
+#+begin_src python :session *py-session :results output file :exports both :tangle "eda.py"
+fig, ax = plt.subplots(2, 1, sharex=True)
+
+n_obs = labels_train.shape[0]
+(labels_train['h1n1_vaccine']
+ .value_counts()
+ .div(n_obs)
+ .plot.barh(title="Proportion of H1N1 vaccine", ax=ax[0]))
+ax[0].set_ylabel('h1n1_vaccine')
+(labels_train['seasonal_vaccine']
+ .value_counts()
+ .div(n_obs)
+ .plot.barh(title="Proportion of Seasonal vaccine", ax=ax[1]))
+ax[1].set_ylabel('seasonal_vaccine')
+fig.tight_layout()
+plt.savefig("img/labels_prop.png")
+print("img/labels_prop.png")
+#+end_src
+
+#+RESULTS:
+[[file:img/labels_prop.png]]

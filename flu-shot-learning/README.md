@@ -31,8 +31,8 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/github_username/repo_name">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
+  <a href="https://github.com/arunkhattri/data_analysis">
+    <img src="img/logo.png" alt="Logo" width="80" height="80">
   </a>
 
 <h3 align="center">Flu shot learning</h3>
@@ -84,7 +84,7 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Flu shot learning][product-screenshot]](https://example.com)
+[![Flu shot learning]["img/screenshot_git.png"]](https://example.com)
 
 Here's a blank template to get started: To avoid retyping too much info. Do a search and replace with your text editor for the following: `github_username`, `repo_name`, `twitter_handle`, `linkedin_username`, `email_client`, `email`, `project_title`, `project_description`
 

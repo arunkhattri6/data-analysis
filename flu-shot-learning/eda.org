@@ -7,16 +7,27 @@
 
 * Table of Contents :toc:
 - [[#pre-requisites][Pre-requisites]]
+  - [[#importing-packages][Importing packages]]
 - [[#data][Data]]
 - [[#exploration][Exploration]]
   - [[#labels][labels]]
   - [[#are-the-two-target-variables-independent][Are the two target variables independent]]
   - [[#features][Features]]
 - [[#building-some-models][Building some models]]
+  - [[#feature-preprocessing][Feature Preprocessing]]
+  - [[#estimators][Estimators]]
+  - [[#putting-together-the-full-pipeline][Putting together the full pipeline]]
+  - [[#training-and-evaluation][Training and Evaluation]]
+- [[#retrain-model-on-full-dataset][Retrain model on full dataset]]
+- [[#generating-the-predictions-for-the-test-set][Generating the predictions for the test set]]
+- [[#footnotes][Footnotes]]
 
 * Pre-requisites
-importing packages
+This analysis is 100% influenced by drivendata blog[fn:1]. Primary purpose was to understand quick exploratory analysis, training simple model, make some predictions and then submit those predictions to the competition.
+
+** Importing packages
 #+begin_src python :session *py-session  :exports code :tangle yes
+import time
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -346,3 +357,307 @@ It looks like knowledge and opinion questions have pretty strong signal for both
 The demographic features have stronger correlation with =seasonal_vaccine=.
 
 * Building some models
+We will be using logistic regression, a simple and fast linear model for classification problems.
+
+#+begin_src python :session *py-session :results output :exports code :tangle eda.py
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LogisticRegression
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, roc_auc_score
+#+end_src
+
+#+RESULTS:
+
+Standard logistic regression only works with numeric input for features. Since this is a benchmark, we're going to build simple models only using the numeric columns of our dataset.
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+numeric_cols = train.columns[train.dtypes != "object"].values
+print(numeric_cols)
+#+end_src
+
+#+RESULTS:
+: ['h1n1_concern' 'h1n1_knowledge' 'behavioral_antiviral_meds'
+:  'behavioral_avoidance' 'behavioral_face_mask' 'behavioral_wash_hands'
+:  'behavioral_large_gatherings' 'behavioral_outside_home'
+:  'behavioral_touch_face' 'doctor_recc_h1n1' 'doctor_recc_seasonal'
+:  'chronic_med_condition' 'child_under_6_months' 'health_worker'
+:  'health_insurance' 'opinion_h1n1_vacc_effective' 'opinion_h1n1_risk'
+:  'opinion_h1n1_sick_from_vacc' 'opinion_seas_vacc_effective'
+:  'opinion_seas_risk' 'opinion_seas_sick_from_vacc' 'household_adults'
+:  'household_children']
+
+** Feature Preprocessing
+There are two important data pre-processing steps before jumping to the logistic regression:
++ Scaling:
+  Transform all features to be on the same scale.
++ NA Imputation:
+  Logistic regression does not handle NA values. We will be using median imputation, which fills missing values with the median from the training data.
+
+Using scikit-learn's built-in composition functionality to encapsulate everything into a pipeline.
+
+#+begin_src python :session *py-session :results output :exports code :tangle eda.py
+# chain preprocessing into a Pipeline object
+# each step is a tuple of (name_you_choose, sklearn_transformer)
+numeric_preprocessing_steps = Pipeline([
+    ('standard_scaler', StandardScaler()),
+    ('simple_imputer', SimpleImputer(strategy='median'))
+])
+
+# create the preprocessor stage of final pipeline
+# each entry in the transformer list is a tuple of
+# (name_choosen, sklearn_transformer, list_of_columns)
+preprocessor = ColumnTransformer(
+    transformers = [
+        ("numeric", numeric_preprocessing_steps, numeric_cols)
+    ],
+    remainder = "drop"
+)
+#+end_src
+
+#+RESULTS:
+
+** Estimators
+Next, we are going to define our estimators.
+As we have two labels to predict, using =MultiOutputClassifier=. This is convenient shortcut for training two of the same type of model and having them run together.
+
+#+begin_src python :session *py-session :results output :exports code :tangle eda.py
+estimators = MultiOutputClassifier(
+    estimator=LogisticRegression(penalty="l2", C=1)
+)
+#+end_src
+
+#+RESULTS:
+** Putting together the full pipeline
+putting stages together into one pipeline object.
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+full_pipeline = Pipeline([
+    ("preprocessor", preprocessor),
+    ("estimators", estimators),
+])
+print(full_pipeline)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Pipeline(steps=[('preprocessor',
+                 ColumnTransformer(transformers=[('numeric',
+                                                  Pipeline(steps=[('standard_scaler',
+                                                                   StandardScaler()),
+                                                                  ('simple_imputer',
+                                                                   SimpleImputer(strategy='median'))]),
+                                                  array(['h1n1_concern', 'h1n1_knowledge', 'behavioral_antiviral_meds',
+       'behavioral_avoidance', 'behavioral_face_mask',
+       'behavioral_wash_hands', 'behavioral_large_gatherings',
+       '...
+       'chronic_med_condition', 'child_under_6_months', 'health_worker',
+       'health_insurance', 'opinion_h1n1_vacc_effective',
+       'opinion_h1n1_risk', 'opinion_h1n1_sick_from_vacc',
+       'opinion_seas_vacc_effective', 'opinion_seas_risk',
+       'opinion_seas_sick_from_vacc', 'household_adults',
+       'household_children'], dtype=object))])),
+                ('estimators',
+                 MultiOutputClassifier(estimator=LogisticRegression(C=1)))])
+#+end_example
+
+** Training and Evaluation
+Splitting data into training and evaluation set.
+As our label classes were moderately imbalanced, using =stratify= argument to enforce even splits.
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+train_splits = train_test_split(
+    train,
+    labels_train,
+    test_size=0.33,
+    shuffle=True,
+    stratify=labels_train,
+    random_state=123
+)
+
+X_train, X_eval, y_train, y_eval  = train_splits
+print(f"[-] X_train shape: {X_train.shape}")
+print(f"[-] X_eval shape: {X_eval.shape}")
+print(f"[-] y_train shape: {y_train.shape}")
+print(f"[-] y_eval shape: {y_eval.shape}")
+#+end_src
+
+#+RESULTS:
+: [-] X_train shape: (17893, 35)
+: [-] X_eval shape: (8814, 35)
+: [-] y_train shape: (17893, 2)
+: [-] y_eval shape: (8814, 2)
+
+let's train the model
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+st = time.time()
+full_pipeline.fit(X_train, y_train)
+
+# predict on evaluation set
+preds = full_pipeline.predict_proba(X_eval)
+elapsed_time = time.time() - st
+
+print(f"[-] time taken: {elapsed_time:.4f} sec")
+print(f"test_probs[0] shape: {preds[0].shape}")
+print(f"test_probs[1] shape: {preds[1].shape}")
+#+end_src
+
+#+RESULTS:
+: [-] time taken: 0.2312 sec
+: test_probs[0] shape: (8814, 2)
+: test_probs[1] shape: (8814, 2)
+
+We need probabilities for class 1 . let's grab them...
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+y_preds = pd.DataFrame(
+    {
+        "h1n1_vaccine": preds[0][:, 1],
+        "seasonal_vaccine": preds[1][:, 1],
+    },
+    index = y_eval.index
+)
+print(f"[-] y_preds shape: {y_preds.shape}")
+print(f"[-] y_preds head:\n{y_preds.head()}")
+#+end_src
+
+#+RESULTS:
+: [-] y_preds shape: (8814, 2)
+: [-] y_preds head:
+:                h1n1_vaccine  seasonal_vaccine
+: respondent_id
+: 8756               0.054788          0.901040
+: 14356              0.048959          0.359612
+: 7355               0.581950          0.835434
+: 15794              0.500649          0.830753
+: 19111              0.279736          0.781635
+
+This driven data competition uses =ROC-AUC= as the metric. Plotting ROC curve...
+
+#+begin_src python :session *py-session :results graphics file output :file img/roc_curve.png :exports both :tangle yes
+with plt.style.context('seaborn-v0_8-colorblind'):
+    def plot_roc(y_true, y_score, label_name, ax):
+        """Plot ROC curve."""
+        fpr, tpr, thresholds = roc_curve(y_true, y_score)
+        ax.plot(fpr, tpr)
+        ax.plot([0, 1], [0, 1], color="grey", linestyle="--")
+        ax.set_ylabel("TPR")
+        ax.set_xlabel("FPR")
+        ax.set_title(
+            f"{label_name}: AUC = {roc_auc_score(y_true, y_score):.4f}"
+        )
+
+    fig, ax = plt.subplots(1, 2, figsize=(9, 4.5))
+    plot_roc(
+        y_eval["h1n1_vaccine"],
+        y_preds["h1n1_vaccine"],
+        "h1n1_vaccine",
+        ax=ax[0]
+    )
+    plot_roc(
+        y_eval["seasonal_vaccine"],
+        y_preds["seasonal_vaccine"],
+        "seasonal_vaccine",
+        ax=ax[1]
+    )
+    fig.tight_layout()
+#+end_src
+
+#+RESULTS:
+[[file:img/roc_curve.png]]
+
+An AUC score of 0.5 is no better than random, and an AUC score of 1.0 is a perfect model.
+Both models seems performing similarly. Scores of around 0.83 are not great, however they're not bad either.
+
+The competition metric is the average between these two AUC values. Scikit-learn's =roc_auc_score= does support multilabel...
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+auc_score = roc_auc_score(y_eval, y_preds)
+print(f"AUC score: {auc_score:.4f}")
+#+end_src
+
+#+RESULTS:
+: AUC score: 0.8288
+
+* Retrain model on full dataset
+Now that we have an idea of our model performance, let's retrain our model on full dataset before generating predictions on the test set.
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+full_pipeline.fit(train, labels_train)
+#+end_src
+
+#+RESULTS:
+
+* Generating the predictions for the test set
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+test_probas = full_pipeline.predict_proba(test)
+print(test_probas)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+[array([[0.87280333, 0.12719667],
+       [0.94475602, 0.05524398],
+       [0.62906951, 0.37093049],
+       ...,
+       [0.80411015, 0.19588985],
+       [0.9492446 , 0.0507554 ],
+       [0.38421362, 0.61578638]]), array([[0.57359831, 0.42640169],
+       [0.92876678, 0.07123322],
+       [0.3626162 , 0.6373838 ],
+       ...,
+       [0.59872448, 0.40127552],
+       [0.68003071, 0.31996929],
+       [0.35787941, 0.64212059]])]
+#+end_example
+
+let's read the Submission format
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+submission_df = pd.read_csv("./data/submission_format.csv", index_col="respondent_id")
+print(submission_df.head())
+#+end_src
+
+#+RESULTS:
+:                h1n1_vaccine  seasonal_vaccine
+: respondent_id
+: 26707                   0.5               0.7
+: 26708                   0.5               0.7
+: 26709                   0.5               0.7
+: 26710                   0.5               0.7
+: 26711                   0.5               0.7
+
+Sanity check for similar rows order by comparing the indices...
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+np.testing.assert_array_equal(test.index.values, submission_df.index.values)
+#+end_src
+
+#+RESULTS:
+So far so good. replace the data with our predictions in submission_df..
+
+#+begin_src python :session *py-session :results output :exports both :tangle eda.py
+my_submission = pd.DataFrame(
+    {
+        "h1n1_vaccine": test_probas[0][:, 1],
+        "seasonal_vaccine": test_probas[1][:, 1],
+    },
+    index = submission_df.index
+)
+print(my_submission.head())
+#+end_src
+
+#+RESULTS:
+:                h1n1_vaccine  seasonal_vaccine
+: respondent_id
+: 26707              0.127197          0.426402
+: 26708              0.055244          0.071233
+: 26709              0.370930          0.637384
+: 26710              0.464351          0.803446
+: 26711              0.286673          0.634903
+
+* Footnotes
+
+[fn:1] [[https://drivendata.co/blog/predict-flu-vaccine-data-benchmark/][Flu shot learning: Predict H1N1 and seasonal flu vaccines - benchmark]]

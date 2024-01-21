@@ -1,10 +1,22 @@
 #+title: Exploratory Data Analysis: Flu-shot Learning
 #+author: Arun Khattri
 #+date: Jan 20, 2024
+#+property: header-args:python :session *py-session
+#+property: header-args:python :tangle yes
+#+options: toc:2
+
+* Table of Contents :toc:
+- [[#pre-requisites][Pre-requisites]]
+- [[#data][Data]]
+- [[#exploration][Exploration]]
+  - [[#labels][labels]]
+  - [[#are-the-two-target-variables-independent][Are the two target variables independent]]
+  - [[#features][Features]]
+- [[#building-some-models][Building some models]]
 
 * Pre-requisites
 importing packages
-#+begin_src python :session *py-session  :exports code :tangle "eda.py"
+#+begin_src python :session *py-session  :exports code :tangle yes
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,7 +29,7 @@ import seaborn as sns
 * Data
 loading training data ...
 
-#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+#+begin_src python :session *py-session :results output :exports both :tangle yes
 train = pd.read_csv("./data/training_set_features.csv", index_col="respondent_id")
 labels_train = pd.read_csv("./data/training_set_labels.csv", index_col="respondent_id")
 print(f"train shape:       {train.shape}")
@@ -28,9 +40,9 @@ print(f"train label shape: {labels_train.shape}")
 : train shape:       (26707, 35)
 : train label shape: (26707, 2)
 
-Sanity check for having same obesrvations in labels and features data of training set...
+Sanity check for having same observations in labels and features data of training set...
 
-#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+#+begin_src python :session *py-session :results output :exports both :tangle yes
 np.testing.assert_array_equal(train.index.values, labels_train.index.values)
 #+end_src
 
@@ -38,9 +50,20 @@ np.testing.assert_array_equal(train.index.values, labels_train.index.values)
 
 the assertion ran and nothing happen, so far so good.
 
+Combining the features and labels for training data
+
+#+begin_src python :session *py-session :results output :exports both :tangle yes
+train_df = train.join(labels_train)
+print(f"[-] train_df shape: {train_df.shape}")
+#+end_src
+
+#+RESULTS:
+: [-] train_df shape: (26707, 37)
+
+
 loading test data and examining the shape ...
 
-#+begin_src python :session *py-session :results output :exports both :tangle "eda.py"
+#+begin_src python :session *py-session :results output :exports both :tangle yes
 test = pd.read_csv("./data/test_set_features.csv")
 print(f"test shape: {test.shape}")
 #+end_src
@@ -53,7 +76,7 @@ print(f"test shape: {test.shape}")
 ** labels
 taking a look at distribution of two target variables.
 
-#+begin_src python :session *py-session :results output file :exports both :tangle "eda.py"
+#+begin_src python :session *py-session :results output file :exports both :tangle yes
 fig, ax = plt.subplots(2, 1, sharex=True)
 
 n_obs = labels_train.shape[0]
@@ -74,3 +97,252 @@ print("img/labels_prop.png")
 
 #+RESULTS:
 [[file:img/labels_prop.png]]
+
+It looks like half of people received the seasonal flu vaccine, however only about 20% of people got vaccinated for H1N1 flu vaccine.
+In terms of class balance, seasonal flu vaccine target is fairly balanced, however H1N1 flu vaccine target has moderately imbalanced classes.
+
+** Are the two target variables independent
+
+#+begin_src python :session *py-session :results output :exports both :tangle yes
+print(
+    pd.crosstab(
+        labels_train['h1n1_vaccine'],
+        labels_train['seasonal_vaccine'],
+        margins=True,
+        normalize=True)
+)
+#+end_src
+
+#+RESULTS:
+: seasonal_vaccine         0         1       All
+: h1n1_vaccine
+: 0                 0.497810  0.289737  0.787546
+: 1                 0.036582  0.175871  0.212454
+: All               0.534392  0.465608  1.000000
+
+Correlation, Phi coefficient is the same as Pearson for two binary variables
+
+#+begin_src python :session *py-session :results output :exports both :tangle yes
+labels_corr = labels_train["h1n1_vaccine"].corr(labels_train["seasonal_vaccine"],
+                                  method="pearson")
+print(f"{labels_corr:.2f}")
+#+end_src
+
+#+RESULTS:
+: 0.38
+
+Two variables are having phi-coefficient of 0.38, indicating a moderate positive correlation.
+Most people who got an H1N1 vaccine also got the seasonal vaccine. While the minority of people who got seasonal vaccine also got H1N1 vaccine.
+
+** Features
+Let's see how the features are correlated with the target variables.
+
+We'll start by trying to visualize if there is simple bivariate correlation. If a feature is correlated with the target, we'd expect there to be different patterns of vaccination as we vary the values of the feature.
+
+Start by using =h1n1_concern=, the level of concern the person showed about the /H1N1 flu/, and =h1n1_vaccine= as a target variable.
+
+get the count of observations for each combination of those two variables.
+
+#+begin_src python :session *py-session :results output :exports both :tangle yes
+counts = (train_df[['h1n1_concern', 'h1n1_vaccine']]
+          .groupby(['h1n1_concern', 'h1n1_vaccine'])
+          .size()
+          .unstack('h1n1_vaccine'))
+print(counts)
+#+end_src
+
+#+RESULTS:
+: h1n1_vaccine     0     1
+: h1n1_concern
+: 0.0           2849   447
+: 1.0           6756  1397
+: 2.0           8102  2473
+: 3.0           3250  1341
+
+creating a bar chart for better visualization of patterns
+
+#+begin_src python :session *py-session :results output file :exports both :tangle yes
+fig, ax = plt.subplots(figsize=(12, 9))
+ax = counts.plot.barh()
+ax.invert_yaxis()
+ax.legend(
+    loc='best',
+    title='h1n1_vaccine'
+)
+plt.savefig("img/bar_h1n1_concern.png")
+print("img/bar_h1n1_concern.png")
+# plt.show()
+#+end_src
+
+#+RESULTS:
+[[file:img/bar_h1n1_concern.png]]
+
+Still, it's hard to say =h1n1_concern= helped somebody to get vaccinated. Also two classes are imbalanced, that's why the fewer vaccination's.
+
+Let's explore the rate of vaccination for each level of =h1n1_concern=.
+
+#+begin_src python :session *py-session :results output :exports both :tangle yes
+h1n1_concern_count = counts.sum(axis='columns')
+print(f"[-] h1n1_concern counts:\n{h1n1_concern_count}")
+
+# proportion
+props = counts.div(h1n1_concern_count, axis='index')
+print(f"[-] props:\n{props}")
+#+end_src
+
+#+RESULTS:
+#+begin_example
+[-] h1n1_concern counts:
+h1n1_concern
+0.0     3296
+1.0     8153
+2.0    10575
+3.0     4591
+dtype: int64
+[-] props:
+h1n1_vaccine         0         1
+h1n1_concern
+0.0           0.864381  0.135619
+1.0           0.828652  0.171348
+2.0           0.766147  0.233853
+3.0           0.707907  0.292093
+#+end_example
+
+Since props adds up to 1.0 and we have only two variables, making a stacked bar, to make it easier to read.
+
+#+begin_src python :session *py-session :results graphics file output :file img/prop_h1n1_concern_stacked.png :exports both :tangle yes
+ax = props.plot.barh(stacked=True)
+ax.invert_yaxis()
+ax.legend(
+    loc='center left',
+    bbox_to_anchor=(1.0, 0.5),
+    title='h1n1_vaccine'
+)
+# legend to be shown
+plt.subplots_adjust(right=0.8)
+#+end_src
+
+#+RESULTS:
+[[file:img/prop_h1n1_concern_stacked.png]]
+
+Now we can say they are more likely to get vaccinated if they are having higher level of concern.
+
+making a function so that we can plot easily and observe other variables.
+
+#+begin_src python :session *py-session :results output  :exports both :tangle yes
+def vaccination_rate_plot(col, target, data, ax=None):
+    """Stacked bar chart of vaccination rate for `target` against `col`.
+    Args:
+        col (string): column name of feature variable
+        target (string): column name of target variable
+        data (pandas DataFrame): dataframe that contains
+        column `col` and `target`
+        ax (matplotlib,axes object, optional): matplotlib axes
+        object to attach plot to
+    """
+    counts = (train_df[[target, col]]
+                .groupby([target, col])
+                .size()
+                .unstack(target)
+                )
+    grp_counts = counts.sum(axis='columns')
+    props = counts.div(grp_counts, axis='index')
+
+    props.plot(kind='barh', stacked=True, ax=ax)
+    ax.invert_yaxis()
+    ax.legend().remove()
+#+end_src
+
+#+RESULTS:
+
+Now we'll loop through several columns and plot against both =h1n1_vaccine= and =seasonal_vaccine=.
+
+#+begin_src python :session *py-session :results graphics file output :file img/features_vs_target.png :exports both :tangle yes
+concern_and_knowledge_cols = [
+    'h1n1_concern',
+    'h1n1_knowledge',
+    ]
+risk_effective_op_cols = [
+    'opinion_h1n1_vacc_effective',
+    'opinion_h1n1_risk',
+    'opinion_h1n1_sick_from_vacc',
+    'opinion_seas_vacc_effective',
+    'opinion_seas_risk',
+    'opinion_seas_sick_from_vacc',
+]
+demographic_cols = ['sex', 'age_group', 'race']
+
+n = len(concern_and_knowledge_cols)
+fig, ax = plt.subplots(
+    n, 2, figsize=(9, n*2.5)
+)
+
+for idx, col in enumerate(concern_and_knowledge_cols):
+    vaccination_rate_plot(col, 'h1n1_vaccine', train_df, ax=ax[idx, 0])
+    vaccination_rate_plot(col, 'seasonal_vaccine', train_df, ax=ax[idx, 1])
+
+ax[0, 0].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'h1n1_vaccine')
+ax[0, 1].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'seasonal_vaccine')
+fig.tight_layout()
+#+end_src
+
+#+RESULTS:
+[[file:img/features_vs_target.png]]
+
+for opinions regarding effectiveness and risks
+
+#+begin_src python :session *py-session :results graphics file output :file img/opinion_vs_target.png :exports both :tangle yes
+n = len(risk_effective_op_cols)
+fig, ax = plt.subplots(
+    n, 2, figsize=(9, n*2.5)
+)
+
+for idx, col in enumerate(risk_effective_op_cols):
+    vaccination_rate_plot(col, 'h1n1_vaccine', train_df, ax=ax[idx, 0])
+    vaccination_rate_plot(col, 'seasonal_vaccine', train_df, ax=ax[idx, 1])
+
+ax[0, 0].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'h1n1_vaccine')
+ax[0, 1].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'seasonal_vaccine')
+fig.tight_layout()
+#+end_src
+
+#+RESULTS:
+[[file:img/opinion_vs_target.png]]
+
+finally plotting demographic variables against target
+
+#+begin_src python :session *py-session :results graphics file output :file img/demographic_vs_target.png :exports both :tangle yes
+n = len(demographic_cols)
+fig, ax = plt.subplots(
+    n, 2, figsize=(9, n * 2.5)
+)
+
+for idx, col in enumerate(demographic_cols):
+    vaccination_rate_plot(col, 'h1n1_vaccine', train_df, ax=ax[idx, 0])
+    vaccination_rate_plot(col, 'seasonal_vaccine', train_df, ax=ax[idx, 1])
+
+ax[0, 0].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'h1n1_vaccine')
+ax[0, 1].legend(
+    loc='lower center', bbox_to_anchor=(0.5, 1.05),
+    title = 'seasonal_vaccine')
+fig.tight_layout()
+#+end_src
+
+#+RESULTS:
+[[file:img/demographic_vs_target.png]]
+
+It looks like knowledge and opinion questions have pretty strong signal for both target variables.
+
+The demographic features have stronger correlation with =seasonal_vaccine=.
+
+* Building some models
